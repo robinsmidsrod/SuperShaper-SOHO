@@ -4,11 +4,23 @@
 #
 # Bandwidth shaper for SOHO DSL connection.
 #
-# Copyright (C) Robin Smidsrød<robin@smidsrod.no> April 8 2009
-# License details can be found on www.smidsrod.no
+# Copyright (C) 2005-2009 Robin Smidsrød <robin@smidsrod.no>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 # Please consider donating if you find this script helpful.
-# Contact information available on www.smidsrod.no.
 #
 # If you need help setting up this script, or have other
 # problems related to Linux networking, I'm available

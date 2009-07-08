@@ -1,0 +1,5 @@
+ * 2009-07-08: 1.3 Cleaned up documentation and made it into an init script.
+ * 2008-08-05: 1.2 Added SIP skinny packets, SquidCam, World Of Warcraft,
+                   UseNet, and custom BitTorrent and ED2k ports.
+ * 2004-09-26: 1.1 Added 1412 as DirectConnect default port.
+ * 2004-09-24: 1.0 Initial version.
