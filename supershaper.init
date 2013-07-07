@@ -54,7 +54,7 @@ DEV=ppp0
 # Your upstream capacity in kbit
 #UPLINK_REAL=704
 #UPLINK_REAL=551
-UPLINK_REAL=805
+UPLINK_REAL=660
 
 # DSL modems usually have large queues. That breaks latency. Set this as high as your DSL
 # modem can handle without queuing packets itself. This value is in percent.
