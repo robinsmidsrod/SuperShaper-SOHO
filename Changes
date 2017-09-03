@@ -1,6 +1,47 @@
- * 2009-07-08: 1.4 Cleaned up documentation.
- * 2009-04-08: 1.3 Converted to init script that should work in /etc/init.d/.
- * 2008-08-05: 1.2 Added SIP skinny packets, SquidCam, World Of Warcraft,
-                   UseNet, and custom BitTorrent and ED2k ports.
- * 2004-09-26: 1.1 Added 1412 as DirectConnect default port.
- * 2004-09-24: 1.0 Initial version.
+2017-09-03: 1.6
+    Rewritten flow and filter definitions to use bash functions,
+      avoiding cargo-culting and allowing for easier
+      definitions of new flows and filters.
+    Stopped using deprecated bash feature for calculations.
+    Switched HTB leaf scheduler from SFQ to fq_codel.
+    Added support for Lync (Skype for Business), cloud
+      backup, VPN client, small ICMP/DNS packets,
+      HTTP reverse proxy and OpenVPN server.
+    Added detection of small packets in general, which should
+      detect most interactive traffic automatically.
+    Removed all filters based on TOS/DSCP bits, as most
+      software don't set these bits on outbound traffic.
+    Removed support for Emule, DirectConnect, Kazaa, Gnutella,
+      MeetCon, LG/Goldstar iPECS MFIM (VoIP phone), SquidCam,
+      Shoutcast, World of Warcraft.
+    Updated comments and documentation, should be easier to
+      understand now.
+    Updated changelog with missing details from previous version.
+    Changed syntax of changelog.
+
+2013-08-13: 1.5
+    Added init info so it's usable as a typical init script.
+    Moved default bucket above P2P bucket.
+    Added another BitTorrent port.
+    Added static Skype port to VoIP bucket.
+    Added LG iPECS MFIM VoIP phone.
+    Added MeetCon video conferencing (by destination IP).
+    Added UseNet (with and without SSL) to download bucket.
+    Improved console output.
+    Cleaned up licensing info and contact details.
+
+2009-07-08: 1.4
+    Cleaned up documentation.
+
+2009-04-08: 1.3
+    Converted to init script that should work in /etc/init.d/.
+
+2008-08-05: 1.2
+    Added SIP skinny packets, SquidCam, World Of Warcraft,
+      UseNet, and custom BitTorrent and ED2k ports.
+
+2004-09-26: 1.1
+    Added 1412 as DirectConnect default port.
+
+2004-09-24: 1.0
+    Initial version.

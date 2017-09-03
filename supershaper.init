@@ -1,19 +1,22 @@
 #!/bin/bash
+
 ### BEGIN INIT INFO
 # Provides:          supershaper
 # Required-Start:    $remote_fs $syslog $network
 # Required-Stop:     $remote_fs $syslog $network
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: traffic shaping rules for ADSL
-# Description:       traffic shaping rules for ADSL
+# Short-Description: traffic shaping rules for DSL
+# Description:       traffic shaping rules for DSL
 ### END INIT INFO
+
+##############################################################################
 #
-# SuperShaper-SOHO 1.5
+# SuperShaper-SOHO 1.6
 #
-# Bandwidth shaper for SOHO ADSL connection.
+# Bandwidth shaper for small/home office DSL connection.
 #
-# Copyright (C) 2005-2013 Robin Smidsrød <robin@smidsrod.no>
+# Copyright (C) 2004-2017 Robin Smidsrød <robin@smidsrod.no>
 #
 # License details and more available at:
 # https://github.com/robinsmidsrod/SuperShaper-SOHO
@@ -25,277 +28,275 @@
 # minimize latency for interactive applications like SSH and making
 # sure P2P applications doesn't saturate your upstream. Standard surfing/mail
 # software is also given priority over P2P to make them snappy.
-# VoIP is given maximum priority (SIP/RTP) (only surpassed by TCP ACKs) to make
-# sure IP telephony doesn't suffer even on a very congested link.
+# Typical VoIP traffic (SIP/RTP/Skype) is given priority to make sure IP
+# telephony doesn't suffer even on a very congested link.
 #
-# Ingress filtering is not applied at all, since it would have little
-# effect on the final result. Let's stick to egress which works.
+# Ingress (inbound) policing is not set up at all, as it is questionable how
+# well it works.  Only egress (outbound) shaping, which is known to be effective, is
+# set up.
 #
-# This script needs iproute2 (tc) and HTB/SFQ netfilter schedulers (linux kernel >=2.4.20)
-# This script has been verified to work out of the box on IPCop-1.3.0_fixes9,
-# which is the preferred deployment platform.
+# This script needs iproute2 (tc) and HTB/FQ_CODEL Linux kernel netfilter
+# schedulers.  The fq_codel scheduler was shipped with Linux kernel and
+# iproute2 3.6, but is most effective with kernels from 3.12 onwards.  See
+# https://www.bufferbloat.net/projects/codel/wiki/ for more details.  The
+# HTB scheduler has been part of Linux since the 2.x versions, so no current
+# systems should miss it.  If you don't have access to fq_codel it is viable
+# to replace it with the SFQ scheduler.
 #
-# Please verify the ports for P2P software if they're non-standard.
+# The TC filter howto can be found here: http://lartc.org/howto/lartc.qdisc.filters.html
+# Man page for u32 classifier can be found here: http://man7.org/linux/man-pages/man8/tc-u32.8.html
 #
-# Queue classes are set up to handle this kind of traffic in prioritized order:
-#
-# 10: TCP/ACK
-# 20: VoIP (sip tos 0x68/rtp tos 0xb8)
-# 30: tos_minimum_delay 0x10 / tos_maximum_reliability 0x04
-# 40: ICMP/DNS/Shoutcast/tos_minimum_cost 0x02/IMAP/SMTP/POP3/HTTP/FTP/Usenet/SSH/tos_maximum_throughput 0x08
-# 50: default / bulk traffic
-# 60: P2P (BitTorrent/eMule/DirectConnect/Kazaa/Gnutella)
-#
-# Change these values to reflect your own setup
+##############################################################################
+
+# Change these values to reflect your own setup.  Make sure to comment out
+# filter commands in the advanced section if you don't use all features
+# mentioned below.
 
 # Your outbound interface
 DEV=ppp0
 
-# Your upstream capacity in kbit
-#UPLINK_REAL=704
-#UPLINK_REAL=551
-UPLINK_REAL=660
+# Your downstream capacity in kilobits/second
+# Not currently used for anything
+DOWNLOAD_BW=24490 # 24.5Mbps, measured 2017-08-31
 
-# DSL modems usually have large queues. That breaks latency. Set this as high as your DSL
-# modem can handle without queuing packets itself. This value is in percent.
-# I usually saturate the upstream with traffic/uploads and use iptraf to measure the outbound traffic
-# on the interface to determine when the shaping takes effect. If iptraf reports higher bandwidth than
-# your calculated bandwidth (see UPLINK below) you modem is probably still queuing packets. This can
-# only be set by trial an error, but 90% is probably a good ballpark number.
+# Your upstream capacity in kilobits/second
+UPLINK_BW=3422 # 3.4Mbps, measured 2017-08-31
+
+# DSL modems usually have large queues that break latency. This phenomenon
+# is called "bufferbloat".  Set this value high as your DSL modem can
+# handle without queuing packets itself.  The value is in percent.  I
+# usually saturate the upstream with traffic/uploads and use iptraf to
+# measure the outbound traffic on the interface to determine when the
+# shaping takes effect.  If iptraf reports higher bandwidth than your
+# calculated bandwidth (see UPLINK below) you modem is probably still
+# queuing packets.  This can only be set by trial an error, but 90% is
+# probably a good ballpark number.
 UPLINK_PERCENT=90
 
-# Calculate actual max bandwidth
-UPLINK=$[UPLINK_PERCENT*UPLINK_REAL/100]
-
-# Set how much bandwidth to use for each class
-UPLINK_10_R=$UPLINK 
-UPLINK_20_R=$UPLINK
-UPLINK_30_R=$UPLINK
-UPLINK_40_R=$[9*UPLINK/10]
-UPLINK_50_R=$[5*UPLINK/10]
-UPLINK_60_R=$[2*UPLINK/10]
-
-# The same as above, but here you set the ceiling, ie. how much a class is allowed to borrow from another
-UPLINK_10_C=$UPLINK
-UPLINK_20_C=$UPLINK
-UPLINK_30_C=$UPLINK
-UPLINK_40_C=$[9*UPLINK/10]
-UPLINK_50_C=$[8*UPLINK/10]
-UPLINK_60_C=$[5*UPLINK/10]
-
-# DirectConnection port
-# In newer versions of DC++ there is no default.
-# Please set your port used in DC++ here.
-PORT_DC=20000
-
-# Additional BitTorrent port
-# The standard BitTorrent port is already defined.
-PORT_BT=50000
-PORT_BT2=50001
-
-# Additional ED2K ports
-# The standard ED2K and Kademelia ports are already defined.
-PORT_ED2K_TCP=30000
-PORT_ED2K_UDP=40000
-
-# Skype uses a random UDP/TCP port, specify what you manually set it to here
+# Skype normally uses a random UDP/TCP port, but specify it manually to be
+# able to control it better
 PORT_SKYPE=15000
+
+# Additional BitTorrent port (the standard BitTorrent port is already defined)
+PORT_BT=50000
+
+# This is the source port for the internal OpenVPN server
+PORT_OPENVPN=1194
+
+# IP address where your work VPN client traffic goes to
+WORK_VPN_IP=1.2.3.4
+
+# IP address where your Lync (Skype for Business) traffic goes to.
+
+# You can (usually) get hold of this information by holding Ctrl down while
+# right-clicking the Lync tray icon, then you'll find an option called
+# "Configuration information".  You might also need to check for established
+# connections using the "conntrack -L" command while doing a "Check call
+# quality" action in Lync.  That might indicate an additional IP address.
+# If so you might need to add another IP in a separate environment variable
+# and add another entry in the advanced section.
+LYNC_IP=1.2.3.5
+#LYNC_IP2=1.2.3.6
+
+# The IP address your cloud backup traffic goes to
+CLOUD_BACKUP_IP=38.121.104.87 # SpiderOakOne
 
 # Set full path to TC command, unless it's in PATH
 TC=tc
 
-################### Nothing to change below this line unless you're adventurous ###############
+##############################################################################
+######## Nothing to change below this line unless you're adventurous #########
+##############################################################################
+
+# Calculate actual max bandwidth
+UPLINK=$((UPLINK_PERCENT*UPLINK_BW/100))
+
+# Which qdisc to use for leaves of the HTB
+# fq_codel seems to be better (if you have it), but use the one that suits you.
+#LEAF_QDISC="sfq perturb 10"
+LEAF_QDISC="fq_codel noecn"
+
+filter_prio=1
+function filter_for_flow {
+    flowid="$1"; shift
+    $TC filter add dev $DEV parent 1: protocol ip prio $((filter_prio++)) u32 "$@" flowid "1:$flowid"
+}
+
+flow_prio=0
+function define_flow {
+    flowid="$1"; rate_percent="$2"; ceil_percent="$3"; shift 3
+    rate=$((rate_percent*UPLINK/100))
+    ceil=$((ceil_percent*UPLINK/100))
+    $TC class add dev $DEV parent 1:1 classid "1:$flowid" htb rate "${rate}kbit" ceil "${ceil}kbit" prio $((flow_prio++))
+    $TC qdisc add dev $DEV parent "1:$flowid" handle "$flowid:" $LEAF_QDISC
+}
 
 function start_me {
-    echo "Turning on packet shaping on $DEV"
-    # Remove existing qdisc
-    $TC qdisc del dev $DEV root 2>&1 >/dev/null
+    stop_me quiet # Remove existing flows and filters
 
-    ################### QUEUE DISCIPLINES
+    printf "Turning on packet shaping on $DEV\n"
 
-    # Add root qdisc
+    ################### FLOW DEFINITIONS ###################
+
+    # Add root qdisc and class
     $TC qdisc add dev $DEV root handle 1: htb default 50
+    $TC class add dev $DEV parent 1: classid 1:1 htb rate "${UPLINK}kbit"
 
-    # Add master qdisc
-    $TC class add dev $DEV parent 1: classid 1:1 htb rate ${UPLINK}kbit
+    # Remember that flows are defined in terms of priority, the first flow
+    # defined has the highest priority and the last one defined has the lowest
+    # priority.
 
-    # Add prio 0 queue (highest)
-    $TC class add dev $DEV parent 1:1 classid 1:10 htb rate ${UPLINK_10_R}kbit ceil ${UPLINK_10_C}kbit prio 0
-    $TC qdisc add dev $DEV parent 1:10 handle 10: sfq perturb 10
+    # define_flow <flowid> <rate_percent> <ceil_percent>
+    # rate_percent is how much bandwidth to use for each flow
+    # ceil_percent is the same as above, but for ceiling,
+    # ie. how much a flow is allowed to borrow from another flow
+    define_flow 10 100 100 # TCP/ACK (small packets)
+    define_flow 11 100 100 # ICMP (small packets)
+    define_flow 12 100 100 # DNS (small packets)
+    define_flow 13 100 100 # Small packets < 128
+    define_flow 14 100 100 # Small packets < 256
+    define_flow 20 100 100 # VoIP (SIP packets)
+    define_flow 21 100 100 # VoIP (RTP packets)
+    define_flow 22 100 100 # VoIP (Skype)
+    define_flow 23 100 100 # VoIP (Lync/Skype for Business)
+    define_flow 30 100 100 # VPN
+    define_flow 40  90  90 # SMTP
+    define_flow 41  90  90 # IMAP/POP3
+    define_flow 45  90  90 # HTTP (browsing)
+    define_flow 48  90  90 # FTP
+    define_flow 50  50  80 # unclassified traffic
+    define_flow 51  20  50 # HTTP reverse proxy
+    define_flow 52  20  50 # OpenVPN server
+    define_flow 60  20  50 # Usenet
+    define_flow 61  20  50 # BitTorrent
+    define_flow 70  10  60 # Cloud backup
 
-    # Add prio 1 queue
-    $TC class add dev $DEV parent 1:1 classid 1:20 htb rate ${UPLINK_20_R}kbit ceil ${UPLINK_20_C}kbit prio 1
-    $TC qdisc add dev $DEV parent 1:20 handle 20: sfq perturb 10
+    ################### FLOW FILTERS ###################
 
-    # Add prio 2 queue
-    $TC class add dev $DEV parent 1:1 classid 1:30 htb rate ${UPLINK_30_R}kbit ceil ${UPLINK_30_C}kbit prio 2
-    $TC qdisc add dev $DEV parent 1:30 handle 30: sfq perturb 10
+    # Remember that filters for flows are defined in order of how they
+    # should match IP packet data.  It's crucial that you match on very
+    # narrow terms first and leave the broad matches for last.
 
-    # Add prio 3 queue
-    $TC class add dev $DEV parent 1:1 classid 1:40 htb rate ${UPLINK_40_R}kbit ceil ${UPLINK_40_C}kbit prio 3
-    $TC qdisc add dev $DEV parent 1:40 handle 40: sfq perturb 10
+    # Cloud backup
+    filter_for_flow 70 match ip dst $CLOUD_BACKUP_IP
 
-    # Add prio 4 queue (default queue)
-    $TC class add dev $DEV parent 1:1 classid 1:50 htb rate ${UPLINK_50_R}kbit ceil ${UPLINK_50_C}kbit prio 4
-    $TC qdisc add dev $DEV parent 1:50 handle 50: sfq perturb 10
+    # Skype for Business / Lync
+    filter_for_flow 23 match ip dst $LYNC_IP
+    #filter_for_flow 23 match ip dst $LYNC_IP2
 
-    # Add prio 5 queue (lowest)
-    $TC class add dev $DEV parent 1:1 classid 1:60 htb rate ${UPLINK_60_R}kbit ceil ${UPLINK_60_C}kbit prio 5
-    $TC qdisc add dev $DEV parent 1:60 handle 60: sfq perturb 10
+    # VPN
+    filter_for_flow 30 match ip dst $WORK_VPN_IP
 
-    ################### FILTERS
-    # tc filter howto: http://lartc.org/howto/lartc.qdisc.filters.html
+    # Usenet (with and without SSL)
+    filter_for_flow 60 match ip dport 119 0xffff
+    filter_for_flow 60 match ip dport 563 0xffff
 
-    # CLASS 10: TCP/ACK
-    $TC filter add dev $DEV protocol ip parent 1: prio 1 u32 match ip protocol 6 0xff match u8 0x05 0x0f at 0 \
-    match u16 0x0000 0xffc0 at 2 match u8 0x10 0xff at 33 flowid 1:10
+    # BitTorrent uploads
+    filter_for_flow 61 match ip sport 6881 0xffff
+    filter_for_flow 61 match ip sport $PORT_BT 0xffff
 
-    # CLASS 20: VoIP (prio 1) (SIP/skinny packets)
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip tos 0x68 0xff flowid 1:20
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip tos 0x58 0xff flowid 1:20
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip tos 0x28 0xff flowid 1:20
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip tos 0x38 0xff flowid 1:20
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip sport 5060 0xffff flowid 1:20
+    # TCP/ACK (small packets)
+    # IP protocol == 6
+    # IP header length == 5
+    # IP packet total length < 64
+    # TCP flags == 0x10 (only ACK bit set)
+    filter_for_flow 10 \
+        match ip protocol 6 0xff \
+        match u8 5 0x0f at 0 \
+        match u16 0x0000 0xffc0 at 2 \
+        match u8 0x10 0xff at 33
 
-    # CLASS 20: VideoConferencing (prio 1) (SquidCam)
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip sport 16967 0xffff flowid 1:20
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip sport 16968 0xffff flowid 1:20
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip sport 16969 0xffff flowid 1:20
+    # ICMP (small packets)
+    # IP protocol == ICMP
+    # IP packet total lenght < 128
+    filter_for_flow 11 \
+        match ip protocol 1 0xff \
+        match u16 0x0000 0xff80 at 2
 
-    # CLASS 20: VoIP (prio 1) (LG/GOLDSTAR iPECS MFIM)
-    # (only required if DiffServ is disabled on device)
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip dport 5588 0xffff flowid 1:20
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip dport 2048 0xffff flowid 1:20
+    # DNS (small packets)
+    # IP dst port == 53
+    # IP packet total lenth < 128
+    filter_for_flow 12 \
+        match ip dport 53 0xffff \
+        match u16 0x0000 0xff80 at 2
 
-    # CLASS 20: MeetCon videoconferencing (prio 2)
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip dst 82.134.112.125/32 \
-                                     match ip dport 443 0xffff \
-                                     flowid 1:20
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip dst 82.134.112.123/32 \
-                                     match ip dport 443 0xffff \
-                                     flowid 1:20
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip dst 82.134.112.123/32 \
-                                     match ip dport 23 0xffff \
-                                     flowid 1:20
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip dst 82.134.112.123/32 \
-                                     match ip dport 1270 0xffff \
-                                     flowid 1:20
+    # VoIP (SIP packets)
+    filter_for_flow 20 match ip sport 5060 0xffff
+    filter_for_flow 20 match ip dport 5060 0xffff
+    filter_for_flow 20 match ip sport 5061 0xffff # With TLS
+    filter_for_flow 20 match ip dport 5061 0xffff # With TLS
 
-    # CLASS 20: VoIP (prio 2) (RTP data)
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip tos 0xb8 0xff flowid 1:20
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip sport 16384 0xffff flowid 1:20
+    # VoIP (RTP data)
+    filter_for_flow 21 match ip sport 16384 0xffff
 
-    # CLASS 20: Skype VoIP (prio 2) (UDP/TCP data)
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip sport 15000 0xffff flowid 1:20
+    # Skype VoIP (UDP/TCP data)
+    filter_for_flow 22 match ip sport $PORT_SKYPE 0xffff
 
-    # CLASS 30: IP TOS 0x10 (prio 1) (minimum delay)
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip tos 0x10 0xff flowid 1:30
+    # SMTP (with and without SSL)
+    filter_for_flow 40 match ip dport 25 0xffff
+    filter_for_flow 40 match ip dport 465 0xffff
+    filter_for_flow 40 match ip dport 587 0xffff
 
-    # CLASS 30: IP TOS 0x04 (prio 2) (maximum reliability)
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip tos 0x04 0xff flowid 1:30
+    # IMAP (with and without SSL)
+    filter_for_flow 41 match ip dport 143 0xffff
+    filter_for_flow 41 match ip dport 993 0xffff
 
-    # CLASS 30: World Of Warcraft (prio 3) (TCP/3724 and TCP/6112)
-    $TC filter add dev $DEV parent 1: protocol ip prio 3 u32 match ip dport 3724 0xffff flowid 1:30
-    $TC filter add dev $DEV parent 1: protocol ip prio 3 u32 match ip dport 6112 0xffff flowid 1:30
+    # POP3 (with and without SSL)
+    filter_for_flow 41 match ip dport 110 0xffff
+    filter_for_flow 41 match ip dport 995 0xffff
 
-    # CLASS 40: ICMP (prio 1)
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip protocol 1 0xff flowid 1:40
+    # HTTP (browsing) (with and without SSL)
+    filter_for_flow 45 match ip dport 80 0xffff
+    filter_for_flow 45 match ip dport 443 0xffff
 
-    # CLASS 40: DNS (prio 2)
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip dport 53 0xffff flowid 1:40
+    # FTP (with and without SSL)
+    filter_for_flow 48 match ip dport 20 0xffff
+    filter_for_flow 48 match ip dport 21 0xffff
+    filter_for_flow 48 match ip dport 989 0xffff
+    filter_for_flow 48 match ip dport 990 0xffff
 
-    # CLASS 40: Shoutcast (prio 3)
-    $TC filter add dev $DEV parent 1: protocol ip prio 3 u32 match ip dport 8000 0xffff flowid 1:40
+    # HTTP/HTTPS reverse proxy
+    filter_for_flow 51 match ip sport 80 0xffff
+    filter_for_flow 51 match ip sport 443 0xffff
 
-    # CLASS 40: IP TOS 0x02 (prio 4) (minimum cost)
-    $TC filter add dev $DEV parent 1: protocol ip prio 4 u32 match ip tos 0x02 0xff flowid 1:40
+    # OpenVPN server
+    filter_for_flow 52 match ip sport $PORT_OPENVPN 0xffff
 
-    # CLASS 40: IMAP (prio 5) (with and without SSL)
-    $TC filter add dev $DEV parent 1: protocol ip prio 5 u32 match ip dport 143 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 5 u32 match ip dport 220 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 5 u32 match ip dport 993 0xffff flowid 1:40
+    # NB: These filters should be last because they match on very broad terms
 
-    # CLASS 40: SMTP (prio 6) (with and without SSL)
-    $TC filter add dev $DEV parent 1: protocol ip prio 6 u32 match ip dport 25 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 6 u32 match ip dport 465 0xffff flowid 1:40
+    # Small packets < 128 bytes
+    # IP packet total length < 128
+    filter_for_flow 13 \
+        match u16 0x0000 0xff80 at 2
 
-    # CLASS 40: POP (prio 7) (with and without SSL)
-    $TC filter add dev $DEV parent 1: protocol ip prio 7 u32 match ip dport 106 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 7 u32 match ip dport 109 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 7 u32 match ip dport 110 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 7 u32 match ip dport 995 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 7 u32 match ip dport 1109 0xffff flowid 1:40
-
-    # CLASS 40: HTTP (prio 8) (with and without SSL)
-    $TC filter add dev $DEV parent 1: protocol ip prio 8 u32 match ip dport 80 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 8 u32 match ip dport 443 0xffff flowid 1:40
-
-    # CLASS 40: FTP (prio 9) (with and without SSL)
-    $TC filter add dev $DEV parent 1: protocol ip prio 9 u32 match ip dport 20 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 9 u32 match ip dport 21 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 9 u32 match ip dport 115 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 9 u32 match ip dport 2431 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 9 u32 match ip dport 2433 0xffff flowid 1:40
-
-    # CLASS 40: Usenet (prio 10) (with and without SSL)
-    $TC filter add dev $DEV parent 1: protocol ip prio 10 u32 match ip dport 119 0xffff flowid 1:40
-    $TC filter add dev $DEV parent 1: protocol ip prio 10 u32 match ip dport 563 0xffff flowid 1:40
-
-    # CLASS 40: SSH (prio 11) (without tos bit set, caters for buggy clients like PuTTY and ssh.com windows client)
-    $TC filter add dev $DEV parent 1: protocol ip prio 11 u32 match ip dport 22 0xffff \
-                                                              match ip tos 0x00 0xff \
-                                                              flowid 1:40
-
-    # CLASS 40: IP TOS 0x08 (prio 12) (maximum throughput)
-    $TC filter add dev $DEV parent 1: protocol ip prio 12 u32 match ip tos 0x08 0xff flowid 1:40
-
-    # CLASS 40: HTTP outbound (prio 13)
-    $TC filter add dev $DEV parent 1: protocol ip prio 13 u32 match ip sport 80 0xffff flowid 1:40
-
-    # CLASS 60: BitTorrent (prio 1)
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip sport 6881 0xffff flowid 1:60
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip sport $PORT_BT 0xffff flowid 1:60
-    $TC filter add dev $DEV parent 1: protocol ip prio 1 u32 match ip sport $PORT_BT2 0xffff flowid 1:60
-
-    # CLASS 60: eMule (prio 2)
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip sport 4661 0xffff flowid 1:60 # eMule TCP
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip sport 4662 0xffff flowid 1:60 # eMule TCP
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip sport 4663 0xffff flowid 1:60 # eMule TCP
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip sport 4672 0xffff flowid 1:60 # eMule UDP
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip sport 4711 0xffff flowid 1:60 # eMule Webserver
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip sport 5768 0xffff flowid 1:60 # Overnet
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip sport $PORT_ED2K_TCP 0xffff flowid 1:60 # eMule TCP - custom
-    $TC filter add dev $DEV parent 1: protocol ip prio 2 u32 match ip sport $PORT_ED2K_UDP 0xffff flowid 1:60 # eMule UDP - custom
-
-    # CLASS 60: DirectConnect (prio 3)
-    $TC filter add dev $DEV parent 1: protocol ip prio 3 u32 match ip dport 411 0xffff flowid 1:60 # Hub connection
-    $TC filter add dev $DEV parent 1: protocol ip prio 3 u32 match ip sport 1412 0xffff flowid 1:60 # Default transfer/search port
-    $TC filter add dev $DEV parent 1: protocol ip prio 3 u32 match ip sport $PORT_DC 0xffff flowid 1:60 # Custom transfer/search port
-
-    # CLASS 60: Kazaa (prio 4)
-    $TC filter add dev $DEV parent 1: protocol ip prio 4 u32 match ip sport 6699 0xffff flowid 1:60
-
-    # CLASS 60: Gnutella (prio 5)
-    $TC filter add dev $DEV parent 1: protocol ip prio 5 u32 match ip sport 6346 0xffff flowid 1:60
+    # Small packets < 256 bytes
+    # IP packet total length < 256
+    filter_for_flow 14 \
+        match u16 0x0000 0xff00 at 2
 }
 
 function stop_me {
-    echo "Turning off packet shaping on $DEV"
     # Remove existing qdisc
-    $TC qdisc del dev $DEV root 2>&1 >/dev/null
+    active_qdisc=$(tc qdisc show dev ppp0| head -n 1 | cut -d" " -f 2)
+    if [ -n "$active_qdisc" -a "$active_qdisc" = "htb" ]; then
+        if [ -z "$1" -o "$1" != "quiet" ]; then
+            printf "Turning off packet shaping on $DEV\n"
+        fi
+        $TC qdisc del dev $DEV root 2>&1 >/dev/null
+    fi
 }
 
 function status_me {
     # Report settings
-    echo "************************* QDISC ******************************"
+    printf "************************* QDISC ******************************\n"
     $TC qdisc show dev $DEV
-    echo "************************* CLASS ******************************"
+    printf "************************* CLASS ******************************\n"
     $TC -s class show dev $DEV | grep -v 'tokens:' | grep -v 'lended:'
 }
 
 function filter_me {
     # Report filter settings
-    echo "************************* FILTER *****************************"
+    printf "************************* FILTER *****************************\n"
     $TC -p filter show dev $DEV
 }
 
@@ -317,7 +318,7 @@ case "$1" in
         filter_me
         ;;
     *)
-        echo "Usage: $0 {start|stop|restart|status|filter}" >&2
+        printf "Usage: $0 {start|stop|restart|status|filter}\n" >&2
         exit 1
 esac
 
