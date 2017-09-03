@@ -1,3 +1,10 @@
+2017-09-03: 2.0
+    Switched scheduler from HTB to HFSC.
+    Added support for exporting flow definitions to a CSV file.
+    Now prints flow definition rates and percentages on startup.
+    Fixed a bug in the stop function not checking the specified interface.
+    Updated README.
+
 2017-09-03: 1.6
     Rewritten flow and filter definitions to use bash functions,
       avoiding cargo-culting and allowing for easier

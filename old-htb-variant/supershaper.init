@@ -12,7 +12,7 @@
 
 ##############################################################################
 #
-# SuperShaper-SOHO 2.0
+# SuperShaper-SOHO 1.6
 #
 # Bandwidth shaper for small/home office DSL connection.
 #
@@ -103,9 +103,6 @@ CLOUD_BACKUP_IP=38.121.104.87 # SpiderOakOne
 # Set full path to TC command, unless it's in PATH
 TC=tc
 
-# Where to store flow labels, accessible for other tools
-FLOWS_FILENAME="/run/tc-flows.csv"
-
 ##############################################################################
 ######## Nothing to change below this line unless you're adventurous #########
 ##############################################################################
@@ -113,7 +110,8 @@ FLOWS_FILENAME="/run/tc-flows.csv"
 # Calculate actual max bandwidth
 UPLINK=$((UPLINK_PERCENT*UPLINK_BW/100))
 
-# Which qdisc to use for HFSC leaves
+# Which qdisc to use for HTB leaves
+# fq_codel seems to be better (if you have it), but use the one that suits you.
 #LEAF_QDISC="sfq perturb 10"
 LEAF_QDISC="fq_codel noecn"
 
@@ -123,59 +121,54 @@ function filter_for_flow {
     $TC filter add dev $DEV parent 1: protocol ip prio $((filter_prio++)) u32 "$@" flowid "1:$flowid"
 }
 
-used_bw_percent=0
-function define_ls_flow {
-    flowid="$1"; min_bw_percent="$2"; label="$3"; shift 3
-    min_bw=$((min_bw_percent*UPLINK/100))
-    $TC class add dev $DEV parent 1:1 classid "1:$flowid" hfsc ls m2 "${min_bw}kbit"
+flow_prio=0
+function define_flow {
+    flowid="$1"; rate_percent="$2"; ceil_percent="$3"; shift 3
+    rate=$((rate_percent*UPLINK/100))
+    ceil=$((ceil_percent*UPLINK/100))
+    $TC class add dev $DEV parent 1:1 classid "1:$flowid" htb rate "${rate}kbit" ceil "${ceil}kbit" prio $((flow_prio++))
     $TC qdisc add dev $DEV parent "1:$flowid" handle "$flowid:" $LEAF_QDISC
-    used_bw_percent=$((used_bw_percent+min_bw_percent))
-    printf "Flow 1:$flowid allocates a minimum rate of %4d Kbps (%2d%%) - %s\n" $min_bw $min_bw_percent "$label"
-    printf "$DEV|hfsc|1:$flowid|$label\n" >> "$FLOWS_FILENAME"
 }
 
 function start_me {
     stop_me quiet # Remove existing flows and filters
 
-    printf "Turning on packet shaping on $DEV at rate ${UPLINK} Kbps\n"
+    printf "Turning on packet shaping on $DEV\n"
 
     ################### FLOW DEFINITIONS ###################
 
-    # Add root qdisc
-    $TC qdisc add dev $DEV root handle 1: hfsc default 50
+    # Add root qdisc and class
+    $TC qdisc add dev $DEV root handle 1: htb default 50
+    $TC class add dev $DEV parent 1: classid 1:1 htb rate "${UPLINK}kbit"
 
-    # Add main class, setting interface rate limit (your upstream max bandwidth)
-    $TC class add dev $DEV parent 1: classid 1:1 hfsc ls m2 "${UPLINK}kbit" ul m2 "${UPLINK}kbit"
-    printf "$DEV|hfsc|1:1|Main\n" >> "$FLOWS_FILENAME"
+    # Remember that flows are defined in terms of priority, the first flow
+    # defined has the highest priority and the last one defined has the lowest
+    # priority.
 
-    # define_ls_flow <flowid> <min_bw_percent> <label>
-    # min_bw_percent is how much bandwidth (in percent) to use for each flow
-    # if link is fully saturated.  Only use integers.  The numbers should
-    # add up to exactly 100.  Definition order doesn't matter, but they are
-    # defined here in terms of how I mentally think of their latency
-    # priorities.
-    define_ls_flow 10 10 "TCP/ACK (pkt len < 64)"
-    define_ls_flow 11  1 "ICMP (pkt len < 128)"
-    define_ls_flow 12  2 "DNS (pkt len < 128)"
-    define_ls_flow 13 10 "Small packets (len < 128)" # SSH interactive traffic hits mostly this one
-    define_ls_flow 14  1 "Small packets (len < 256)" # Some SSH interactive traffic here as well
-    define_ls_flow 20  1 "VoIP (SIP)"
-    define_ls_flow 21  3 "VoIP (RTP)"
-    define_ls_flow 22  3 "VoIP (Skype)" # 100Kbps audio only, 1.5Mbps with HD video
-    define_ls_flow 23  5 "VoIP (Lync)"  # Skype for Business, 160Kbps audio only, 1.66Mbps with HD video
-    define_ls_flow 30 13 "VPN"
-    define_ls_flow 40  9 "SMTP"
-    define_ls_flow 41  9 "IMAP/POP3"
-    define_ls_flow 45 10 "HTTP (browsing)"
-    define_ls_flow 48  9 "FTP"
-    define_ls_flow 50  9 "default" # unclassified traffic
-    define_ls_flow 51  1 "HTTP reverse proxy"
-    define_ls_flow 52  1 "OpenVPN server"
-    define_ls_flow 60  1 "Usenet"
-    define_ls_flow 61  1 "BitTorrent"
-    define_ls_flow 70  1 "Cloud backup" # SpiderOakONE
-
-    printf "All flows combined use %d%%.\n" $used_bw_percent
+    # define_flow <flowid> <rate_percent> <ceil_percent>
+    # rate_percent is how much bandwidth to use for each flow
+    # ceil_percent is the same as above, but for ceiling,
+    # ie. how much a flow is allowed to borrow from another flow
+    define_flow 10 100 100 # TCP/ACK (small packets)
+    define_flow 11 100 100 # ICMP (small packets)
+    define_flow 12 100 100 # DNS (small packets)
+    define_flow 13 100 100 # Small packets < 128
+    define_flow 14 100 100 # Small packets < 256
+    define_flow 20 100 100 # VoIP (SIP packets)
+    define_flow 21 100 100 # VoIP (RTP packets)
+    define_flow 22 100 100 # VoIP (Skype)
+    define_flow 23 100 100 # VoIP (Lync/Skype for Business)
+    define_flow 30 100 100 # VPN
+    define_flow 40  90  90 # SMTP
+    define_flow 41  90  90 # IMAP/POP3
+    define_flow 45  90  90 # HTTP (browsing)
+    define_flow 48  90  90 # FTP
+    define_flow 50  50  80 # unclassified traffic
+    define_flow 51  20  50 # HTTP reverse proxy
+    define_flow 52  20  50 # OpenVPN server
+    define_flow 60  20  50 # Usenet
+    define_flow 61  20  50 # BitTorrent
+    define_flow 70  10  60 # Cloud backup
 
     ################### FLOW FILTERS ###################
 
@@ -284,14 +277,12 @@ function start_me {
 function stop_me {
     # Remove existing qdisc
     active_qdisc=$(tc qdisc show dev $DEV| head -n 1 | cut -d" " -f 2)
-    if [ -n "$active_qdisc" -a "$active_qdisc" = "hfsc" ]; then
+    if [ -n "$active_qdisc" -a "$active_qdisc" = "htb" ]; then
         if [ -z "$1" -o "$1" != "quiet" ]; then
             printf "Turning off packet shaping on $DEV\n"
         fi
         $TC qdisc del dev $DEV root 2>&1 >/dev/null
     fi
-    # Remove existing flows file if it exists
-    [ -e "$FLOWS_FILENAME" ] && rm -f "$FLOWS_FILENAME"
 }
 
 function status_me {
