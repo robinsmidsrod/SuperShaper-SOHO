@@ -60,6 +60,8 @@ DEV=ppp0
 DOWNLOAD_BW=24490 # 24.5Mbps, measured 2017-08-31
 
 # Your upstream capacity in kilobits/second
+# Run speedtest.net while pinging upstream first hop and look at max latency
+# and packet loss summary after test is complete
 UPLINK_BW=3422 # 3.4Mbps, measured 2017-08-31
 
 # DSL modems usually have large queues that break latency. This phenomenon
@@ -98,7 +100,7 @@ LYNC_IP=1.2.3.5
 #LYNC_IP2=1.2.3.6
 
 # The IP address your cloud backup traffic goes to
-CLOUD_BACKUP_IP=38.121.104.87 # SpiderOakOne
+CLOUD_BACKUP_IP=74.126.144.105 # SpiderOakOne
 
 # Set full path to TC command, unless it's in PATH
 TC=tc
@@ -114,8 +116,10 @@ FLOWS_FILENAME="/run/tc-flows.csv"
 UPLINK=$((UPLINK_PERCENT*UPLINK_BW/100))
 
 # Which qdisc to use for HFSC leaves
-#LEAF_QDISC="sfq perturb 10"
-LEAF_QDISC="fq_codel noecn"
+# Turns out that the old sfq seems to work better than fq_codel in
+# conjunction with HFSC Try out both and decide for yourself
+LEAF_QDISC="sfq divisor 65536 headdrop"
+#LEAF_QDISC="fq_codel noecn"
 
 filter_prio=1
 function filter_for_flow {
@@ -132,6 +136,7 @@ function define_ls_flow {
     used_bw_percent=$((used_bw_percent+min_bw_percent))
     printf "Flow 1:$flowid allocates a minimum rate of %4d Kbps (%2d%%) - %s\n" $min_bw $min_bw_percent "$label"
     printf "$DEV|hfsc|1:$flowid|$label\n" >> "$FLOWS_FILENAME"
+    printf "$DEV|sfq|$flowid:|$label\n" >> "$FLOWS_FILENAME"
 }
 
 function start_me {
@@ -156,14 +161,14 @@ function start_me {
     # priorities.
     define_ls_flow 10 10 "TCP/ACK (pkt len < 64)"
     define_ls_flow 11  1 "ICMP (pkt len < 128)"
-    define_ls_flow 12  2 "DNS (pkt len < 128)"
+    define_ls_flow 12  4 "DNS (pkt len < 128)"
     define_ls_flow 13 10 "Small packets (len < 128)" # SSH interactive traffic hits mostly this one
     define_ls_flow 14  1 "Small packets (len < 256)" # Some SSH interactive traffic here as well
     define_ls_flow 20  1 "VoIP (SIP)"
     define_ls_flow 21  3 "VoIP (RTP)"
     define_ls_flow 22  3 "VoIP (Skype)" # 100Kbps audio only, 1.5Mbps with HD video
     define_ls_flow 23  5 "VoIP (Lync)"  # Skype for Business, 160Kbps audio only, 1.66Mbps with HD video
-    define_ls_flow 30 13 "VPN"
+    define_ls_flow 30 11 "VPN"
     define_ls_flow 40  9 "SMTP"
     define_ls_flow 41  9 "IMAP/POP3"
     define_ls_flow 45 10 "HTTP (browsing)"
@@ -214,14 +219,14 @@ function start_me {
 
     # ICMP (small packets)
     # IP protocol == ICMP
-    # IP packet total lenght < 128
+    # IP packet total length < 128
     filter_for_flow 11 \
         match ip protocol 1 0xff \
         match u16 0x0000 0xff80 at 2
 
     # DNS (small packets)
     # IP dst port == 53
-    # IP packet total lenth < 128
+    # IP packet total length < 128
     filter_for_flow 12 \
         match ip dport 53 0xffff \
         match u16 0x0000 0xff80 at 2
