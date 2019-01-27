@@ -12,11 +12,11 @@
 
 ##############################################################################
 #
-# SuperShaper-SOHO 1.6
+# SuperShaper-SOHO 2.0
 #
-# Bandwidth shaper for small/home office DSL connection.
+# Bandwidth shaper for home DSL connection.
 #
-# Copyright (C) 2004-2017 Robin Smidsrød <robin@smidsrod.no>
+# Copyright (C) 2005-2017 Robin Smidsrød <robin@smidsrod.no>
 #
 # License details and more available at:
 # https://github.com/robinsmidsrod/SuperShaper-SOHO
@@ -98,7 +98,7 @@ LYNC_IP=1.2.3.5
 #LYNC_IP2=1.2.3.6
 
 # The IP address your cloud backup traffic goes to
-CLOUD_BACKUP_IP=38.121.104.87 # SpiderOakOne
+CLOUD_BACKUP_IP=1.2.3.7
 
 # Set full path to TC command, unless it's in PATH
 TC=tc
@@ -117,17 +117,23 @@ LEAF_QDISC="fq_codel noecn"
 
 filter_prio=1
 function filter_for_flow {
+    #echo "$@"
     flowid="$1"; shift
     $TC filter add dev $DEV parent 1: protocol ip prio $((filter_prio++)) u32 "$@" flowid "1:$flowid"
 }
 
 flow_prio=0
 function define_flow {
+    #echo "$@"
     flowid="$1"; rate_percent="$2"; ceil_percent="$3"; shift 3
     rate=$((rate_percent*UPLINK/100))
     ceil=$((ceil_percent*UPLINK/100))
     $TC class add dev $DEV parent 1:1 classid "1:$flowid" htb rate "${rate}kbit" ceil "${ceil}kbit" prio $((flow_prio++))
     $TC qdisc add dev $DEV parent "1:$flowid" handle "$flowid:" $LEAF_QDISC
+}
+
+function bin2dec {
+    printf '0x%x' "$((2#$1))"
 }
 
 function start_me {
@@ -207,14 +213,14 @@ function start_me {
 
     # ICMP (small packets)
     # IP protocol == ICMP
-    # IP packet total lenght < 128
+    # IP packet total length < 128
     filter_for_flow 11 \
         match ip protocol 1 0xff \
         match u16 0x0000 0xff80 at 2
 
     # DNS (small packets)
     # IP dst port == 53
-    # IP packet total lenth < 128
+    # IP packet total length < 128
     filter_for_flow 12 \
         match ip dport 53 0xffff \
         match u16 0x0000 0xff80 at 2
