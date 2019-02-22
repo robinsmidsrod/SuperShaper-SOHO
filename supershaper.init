@@ -108,6 +108,15 @@ TC=tc
 # Where to store flow labels, accessible for other tools
 FLOWS_FILENAME="/run/tc-flows.csv"
 
+# Stab setting.
+TC_stab_linklayer=
+TC_stab_overhead=
+TC_stab_mpu=
+TC_stab_mtu=
+TC_stab_tsize=
+
+
+
 ##############################################################################
 ######## Nothing to change below this line unless you're adventurous #########
 ##############################################################################
@@ -120,6 +129,10 @@ UPLINK=$((UPLINK_PERCENT*UPLINK_BW/100))
 # conjunction with HFSC Try out both and decide for yourself
 LEAF_QDISC="sfq divisor 65536 headdrop"
 #LEAF_QDISC="fq_codel noecn"
+
+# Stab paramater.
+$stab=((stab "$TC_stab_linklayer $TC_stab_overhead $TC_stab_mpu $TC_stab_mtu $TC_stab_tsize"))
+
 
 filter_prio=1
 function filter_for_flow {
@@ -147,7 +160,7 @@ function start_me {
     ################### FLOW DEFINITIONS ###################
 
     # Add root qdisc
-    $TC qdisc add dev $DEV root handle 1: hfsc default 50
+    $TC qdisc add dev $DEV root handle 1: "$stab" hfsc default 50
 
     # Add main class, setting interface rate limit (your upstream max bandwidth)
     $TC class add dev $DEV parent 1: classid 1:1 hfsc ls m2 "${UPLINK}kbit" ul m2 "${UPLINK}kbit"
