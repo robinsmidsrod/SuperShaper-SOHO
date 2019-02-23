@@ -108,11 +108,17 @@ TC=tc
 # Where to store flow labels, accessible for other tools
 FLOWS_FILENAME="/run/tc-flows.csv"
 
-# Stab setting.
+# Stab setting for strict calc.
+# Set atm or ethernet
 TC_stab_linklayer=
+# According to Typical overhead list , see below
+# https://www.systutorials.com/docs/linux/man/8-tc-stab/
 TC_stab_overhead=
+# If you use ethernet or internet via ethernet , set 64.
 TC_stab_mpu=
+# Set your MTU , default is 2047
 TC_stab_mtu=
+# Table size for calc, default is 512
 TC_stab_tsize=
 
 
