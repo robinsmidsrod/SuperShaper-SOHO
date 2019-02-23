@@ -137,7 +137,7 @@ LEAF_QDISC="sfq divisor 65536 headdrop"
 #LEAF_QDISC="fq_codel noecn"
 
 # Stab paramater.
-$stab=((stab "$TC_stab_linklayer $TC_stab_overhead $TC_stab_mpu $TC_stab_mtu $TC_stab_tsize"))
+$stab=((stab linklayer"$TC_stab_linklayer overhead $TC_stab_overhead mpu $TC_stab_mpu mtu $TC_stab_mtu tsize $TC_stab_tsize"))
 
 
 filter_prio=1
