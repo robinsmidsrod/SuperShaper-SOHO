@@ -109,7 +109,10 @@ TC=tc
 FLOWS_FILENAME="/run/tc-flows.csv"
 
 # Stab setting
-
+linklayer=ethernet
+overhead=-14
+tsize=2048
+mpu=0-64
 
 ##############################################################################
 ######## Nothing to change below this line unless you're adventurous #########
