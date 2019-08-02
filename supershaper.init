@@ -153,7 +153,7 @@ function start_me {
     ################### FLOW DEFINITIONS ###################
 
     # Add root qdisc
-    $TC qdisc add dev $DEV root handle 1: stab linklayer $linklayer overhead $overhead mpu $mpu $tsize hfsc default 50
+    $TC qdisc add dev $DEV root handle 1: (stab linklayer $linklayer overhead $overhead mpu $mpu $tsize) hfsc default 50
 
     # Add main class, setting interface rate limit (your upstream max bandwidth)
     $TC class add dev $DEV parent 1: classid 1:1 hfsc ls m2 "${UPLINK}kbit" ul m2 "${UPLINK}kbit"
