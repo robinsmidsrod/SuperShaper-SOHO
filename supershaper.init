@@ -108,6 +108,9 @@ TC=tc
 # Where to store flow labels, accessible for other tools
 FLOWS_FILENAME="/run/tc-flows.csv"
 
+# Stab setting
+
+
 ##############################################################################
 ######## Nothing to change below this line unless you're adventurous #########
 ##############################################################################
@@ -147,7 +150,7 @@ function start_me {
     ################### FLOW DEFINITIONS ###################
 
     # Add root qdisc
-    $TC qdisc add dev $DEV root handle 1: hfsc default 50
+    $TC qdisc add dev $DEV root handle 1: stab linklayer $linklayer overhead $overhead mpu $mpu $tsize hfsc default 50
 
     # Add main class, setting interface rate limit (your upstream max bandwidth)
     $TC class add dev $DEV parent 1: classid 1:1 hfsc ls m2 "${UPLINK}kbit" ul m2 "${UPLINK}kbit"
