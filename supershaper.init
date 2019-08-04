@@ -109,7 +109,9 @@ TC=tc
 FLOWS_FILENAME="/run/tc-flows.csv"
 
 # Stab setting
-stab="linklayer ethernet overhead -14 mpu 0 tsize 512"
+#stab="linklayer ethernet overhead -14 mpu 0 tsize 512"
+stab="stab linklayer atm overhead -4"
+
 linklayer=ethernet,atm
 overhead=it depends on connection kind.
 tsize=2047
@@ -125,7 +127,7 @@ UPLINK=$((UPLINK_PERCENT*UPLINK_BW/100))
 # Which qdisc to use for HFSC leaves
 # Turns out that the old sfq seems to work better than fq_codel in
 # conjunction with HFSC Try out both and decide for yourself
-LEAF_QDISC="sfq divisor 65536 headdrop"
+LEAF_QDISC="sfq divisor 65536 headdrop quantum 1643"
 #LEAF_QDISC="fq_codel noecn"
 
 filter_prio=1
