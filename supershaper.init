@@ -113,8 +113,8 @@ FLOWS_FILENAME="/run/tc-flows.csv"
 STAB="stab linklayer ethernet overhead 40"
 # PPPoA ADSL/VDSL over ATM
 # STAB="stab linklayer atm overhead 10"
-# If you use LAN to internet , it should set -14 plus ip overehad.
-# Additinal options are there,according to http://linuxcommandlibrary.com/man/tc-stab.html
+# If you configure it within the LAN, you need to subtract 14 from the overhead.
+# If you are using any other line, refer to the following. http://linuxcommandlibrary.com/man/tc-stab.html
 
 ##############################################################################
 ######## Nothing to change below this line unless you're adventurous #########
@@ -126,7 +126,7 @@ UPLINK=$((UPLINK_PERCENT*UPLINK_BW/100))
 # Which qdisc to use for HFSC leaves
 # Turns out that the old sfq seems to work better than fq_codel in
 # conjunction with HFSC Try out both and decide for yourself
-# Quantum should be MTU size. And also , under ATM connection , Qutantum number is power of ( 48 + 5 ).
+# Quantum must be greater than or equal to MTU. Also, on ATM lines, Quantum should be a multiple of (48 + 5) = 53.
 # If MTU = 1500 , 1500 + 40 < 48 * 33 = 1584 , 33 * ( 48 + 5 ) = 1749.
 LEAF_QDISC="sfq divisor 65536 headdrop quantum 1749"
 #LEAF_QDISC="fq_codel noecn"
