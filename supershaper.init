@@ -114,8 +114,7 @@ STAB="stab linklayer ethernet overhead 40"
 # PPPoA ADSL/VDSL over ATM
 # STAB="stab linklayer atm overhead 10"
 # If you use LAN to internet , it should set -14 plus ip overehad.
-# According to http://linuxcommandlibrary.com/man/tc-stab.html
-
+# Additinal options are there,according to http://linuxcommandlibrary.com/man/tc-stab.html
 
 ##############################################################################
 ######## Nothing to change below this line unless you're adventurous #########
