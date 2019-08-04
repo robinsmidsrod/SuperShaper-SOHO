@@ -73,7 +73,7 @@ UPLINK_BW=3422 # 3.4Mbps, measured 2017-08-31
 # calculated bandwidth (see UPLINK below) you modem is probably still
 # queuing packets.  This can only be set by trial an error, but 90% is
 # probably a good ballpark number.
-UPLINK_PERCENT=90
+UPLINK_PERCENT=95
 
 # Skype normally uses a random UDP/TCP port, but specify it manually to be
 # able to control it better
