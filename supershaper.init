@@ -112,7 +112,7 @@ FLOWS_FILENAME="/run/tc-flows.csv"
 # PPPoE ADSL/VDSL over ATM
 STAB="linklayer ethernet overhead 40"
 # PPPoA ADSL/VDSL over ATM
-#STAB="linklayer atm overhead 10"
+# STAB="linklayer atm overhead 10"
 #
 #http://linuxcommandlibrary.com/man/tc-stab.html
 
