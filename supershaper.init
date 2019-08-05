@@ -73,7 +73,7 @@ UPLINK_BW=3422 # 3.4Mbps, measured 2017-08-31
 # calculated bandwidth (see UPLINK below) you modem is probably still
 # queuing packets.  This can only be set by trial an error, but 90% is
 # probably a good ballpark number.
-UPLINK_PERCENT=98
+UPLINK_PERCENT=95
 
 # Skype normally uses a random UDP/TCP port, but specify it manually to be
 # able to control it better
@@ -111,15 +111,19 @@ FLOWS_FILENAME="/run/tc-flows.csv"
 # Stab setting
 # Configure a stab to calculate a more accurate queue size and avoid wasting bandwidth.
 # Adds overhead to the generated packet size to fit the bandwidth, eliminating computational dead space. The actual packet is not changed.
+
+# Calculate the overhead per IP packet.
 # PPPoE ADSL/VDSL over ATM
 # PPPoE overhead - 32+ (PPPoE - 8, ATM - 10, ethernet - 14)
 STAB="stab linklayer ethernet overhead 32"
 # PPPoA ADSL/VDSL over ATM
 # STAB="stab linklayer atm overhead 10"
 # PPPoA overhead - 10+ (PPP - 2, ATM - 8)
-# Quantum must be greater than or equal to MTU. Also, on ATM lines, Quantum should be a multiple of (48 + 5) = 53.
+
+# Calculate the overhead per ATM cell.
+# In ATM circuits, IP packets with overhead are divided into 48 byte cells at a lower layer, and fractions are padded automatically. 
+# Also, each cell consumes 5 bytes of overhead.
 # If the MTU is 1500 bytes, the minimum required bandwidth is 1696 bytes combined with overhead.
-# # On an ATM line, all data must use multiples of 48 bytes of bandwidth, and each must account for 5 bytes of overhead.
 # 31 < (1500 + 32) / 48 < 32 , 32 * ( 48 + 5 ) = 1696.
 # If you are using any other line, refer to the following. http://linuxcommandlibrary.com/man/tc-stab.html
 QUANTUM="1696"
