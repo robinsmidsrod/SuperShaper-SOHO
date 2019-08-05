@@ -73,7 +73,7 @@ UPLINK_BW=3422 # 3.4Mbps, measured 2017-08-31
 # calculated bandwidth (see UPLINK below) you modem is probably still
 # queuing packets.  This can only be set by trial an error, but 90% is
 # probably a good ballpark number.
-UPLINK_PERCENT=90
+UPLINK_PERCENT=95
 
 # Skype normally uses a random UDP/TCP port, but specify it manually to be
 # able to control it better
@@ -108,6 +108,27 @@ TC=tc
 # Where to store flow labels, accessible for other tools
 FLOWS_FILENAME="/run/tc-flows.csv"
 
+# Stab setting
+# Configure a stab to calculate a more accurate queue size and avoid wasting bandwidth.
+# Adds overhead to the generated packet size to fit the bandwidth, eliminating computational dead space. The actual packet is not changed.
+
+# Calculate the overhead per IP packet.
+# PPPoE ADSL/VDSL over ATM
+# PPPoE overhead = 32+ (PPPoE = 8, ATM = 10, ethernet = 14)
+STAB="stab linklayer ethernet overhead 32"
+# PPPoA ADSL/VDSL over ATM
+# STAB="stab linklayer atm overhead 10"
+# PPPoA overhead = 10+ (PPP = 2, ATM = 8)
+
+# Calculate the overhead per ATM cell.
+# In ATM circuits, IP packets with overhead are divided into 48 byte cells at a lower layer, and fractions are padded automatically. 
+# Also, each cell consumes 5 bytes of overhead.
+# If the MTU is 1500 bytes,
+# 31 < (1500 + 32) / 48 < 32. 32 cells are needed to send 1 packet.
+# 32 * ( 48 + 5 ) = 1696. 32 cells are 1696 bytes.
+QUANTUM="1696"
+# If you are using any other line, refer to the following. http://linuxcommandlibrary.com/man/tc-stab.html
+
 ##############################################################################
 ######## Nothing to change below this line unless you're adventurous #########
 ##############################################################################
@@ -118,7 +139,8 @@ UPLINK=$((UPLINK_PERCENT*UPLINK_BW/100))
 # Which qdisc to use for HFSC leaves
 # Turns out that the old sfq seems to work better than fq_codel in
 # conjunction with HFSC Try out both and decide for yourself
-LEAF_QDISC="sfq divisor 65536 headdrop"
+
+LEAF_QDISC="sfq divisor 65536 headdrop $QUANTUM"
 #LEAF_QDISC="fq_codel noecn"
 
 filter_prio=1
@@ -147,7 +169,7 @@ function start_me {
     ################### FLOW DEFINITIONS ###################
 
     # Add root qdisc
-    $TC qdisc add dev $DEV root handle 1: hfsc default 50
+    $TC qdisc add dev $DEV root handle 1: $STAB hfsc default 50
 
     # Add main class, setting interface rate limit (your upstream max bandwidth)
     $TC class add dev $DEV parent 1: classid 1:1 hfsc ls m2 "${UPLINK}kbit" ul m2 "${UPLINK}kbit"
