@@ -123,7 +123,7 @@ STAB="stab linklayer ethernet overhead 32"
 # Calculate the overhead per ATM cell.
 # In ATM circuits, IP packets with overhead are divided into 48 byte cells at a lower layer, and fractions are padded automatically. 
 # Also, each cell consumes 5 bytes of overhead.
-# If the MTU is 1500 bytes, the minimum required bandwidth is 1696 bytes combined with overhead.
+# If the MTU is 1500 bytes,
 # 31 < (1500 + 32) / 48 < 32. 32 cells are needed to send 1 packet.
 # 32 * ( 48 + 5 ) = 1696. 32 cells are 1696 bytes.
 QUANTUM="1696"
