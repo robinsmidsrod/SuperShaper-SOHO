@@ -110,11 +110,19 @@ FLOWS_FILENAME="/run/tc-flows.csv"
 
 # Stab setting
 # Configure a stab to calculate a more accurate queue size and avoid wasting bandwidth.
+# Adds overhead to the generated packet size to fit the bandwidth, eliminating computational dead space. The actual packet is not changed.
 # PPPoE ADSL/VDSL over ATM
-STAB="stab linklayer ethernet overhead 40"
+# PPPoE overhead - 32+ (PPPoE - 8, ATM - 10, ethernet - 14)
+STAB="stab linklayer ethernet overhead 32"
 # PPPoA ADSL/VDSL over ATM
 # STAB="stab linklayer atm overhead 10"
+# PPPoA overhead - 10+ (PPP - 2, ATM - 8)
+# Quantum must be greater than or equal to MTU. Also, on ATM lines, Quantum should be a multiple of (48 + 5) = 53.
+# If the MTU is 1500 bytes, the minimum required bandwidth is 1696 bytes combined with overhead.
+# # On an ATM line, all data must use multiples of 48 bytes of bandwidth, and each must account for 5 bytes of overhead.
+# 31 < (1500 + 32) / 48 < 32 , 32 * ( 48 + 5 ) = 1696.
 # If you are using any other line, refer to the following. http://linuxcommandlibrary.com/man/tc-stab.html
+QUANTUM="1696"
 
 ##############################################################################
 ######## Nothing to change below this line unless you're adventurous #########
@@ -126,9 +134,8 @@ UPLINK=$((UPLINK_PERCENT*UPLINK_BW/100))
 # Which qdisc to use for HFSC leaves
 # Turns out that the old sfq seems to work better than fq_codel in
 # conjunction with HFSC Try out both and decide for yourself
-# Quantum must be greater than or equal to MTU. Also, on ATM lines, Quantum should be a multiple of (48 + 5) = 53.
-# If MTU = 1500 , 1500 + 40 < 48 * 33 = 1584 , 33 * ( 48 + 5 ) = 1749.
-LEAF_QDISC="sfq divisor 65536 headdrop quantum 1749"
+
+LEAF_QDISC="sfq divisor 65536 headdrop $QUANTUM"
 #LEAF_QDISC="fq_codel noecn"
 
 filter_prio=1
